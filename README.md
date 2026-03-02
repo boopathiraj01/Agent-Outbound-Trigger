@@ -1,55 +1,107 @@
-📞 Outbound Calling Scheduler
-An async, production-ready outbound SIP call scheduler built with FastAPI, LiveKit, and APScheduler. Supports concurrent multi-trunk calling, smart retry logic, CSV/XLSX bulk uploads, and live capacity monitoring.
+# 📞 Outbound Calling Scheduler
 
-⚙️ Installation
-1. Install Requirements
+An asynchronous, production-ready outbound SIP call scheduler built with FastAPI, LiveKit, and APScheduler.
+
+It supports:
+
+- Concurrent multi-trunk outbound calling
+- Smart retry handling
+- CSV/XLSX bulk scheduling
+- Live trunk capacity monitoring
+- Business-hour automation via cron
+- Graceful shutdown and lifecycle management
+
+Designed for reliability, operational clarity, and long-term scalability.
+
+---
+
+# 🏗 Architecture Overview
+
+```
+FastAPI
+├── /schedule/* ──► register_job() ──► APScheduler (date trigger)
+│ │
+│ execute_scheduled_call()
+│ │
+│ TrunkManager.acquire()
+│ │
+│ make_outbound_call()
+│ ├── Create LiveKit Room
+│ ├── Dispatch SIP Participant
+│ └── _monitor_room() [async task]
+│ │
+│ TrunkManager.release()
+│ └── Retry if unanswered
+│
+├── GET /jobs ──► APScheduler jobs + TrunkManager.status()
+└── GET /capacity ──► TrunkManager.status()
+```
+
+---
+
+# ⚙️ Installation
+
+## 1️⃣ Install Dependencies
+
 ```bash
 pip install -r requirements.txt
 ```
 
-2. Configure .env
+## 2️⃣ Configure Environment Variables
 
-```env
+Create a `.env` file:
+
+```
 LIVEKIT_URL=wss://<your-livekit-host>
 LIVEKIT_API_KEY=AP***
 LIVEKIT_API_SECRET=snm***
+
+# Optional (comma-separated trunk IDs)
+SIP_TRUNK_IDS=ST_xxx,ST_yyy,ST_zzz
 ```
 
-# Optional: comma-separated trunk IDs (defaults provided)
-SIP_TRUNK_IDS=ST_xxx,ST_yyy,ST_zzz
-3. Run the Scheduler
+If not provided, default trunk IDs will be used.
+
+## 3️⃣ Run the Application
+
 ```bash
 python trigger.py
-
 ```
 
+## 4️⃣ Open Swagger UI
 
-4. Open Swagger UI
-``` http://127.0.0.1:8000/docs ```
+`http://127.0.0.1:8000/docs`
 
-🚀 API Endpoints
+# 🚀 API Endpoints
 
-```
-json{
-  "service": "Outbound Scheduler",
-  "endpoints": {
-    "POST /schedule/single":  "Schedule one call",
-    "POST /schedule/bulk":    "Schedule multiple calls",
-    "POST /schedule/file":    "Schedule from CSV/XLSX",
-    "GET  /jobs":             "List scheduled jobs (with capacity info)",
-    "DELETE /jobs/{job_id}":  "Cancel a job",
-    "GET  /capacity":         "Live trunk capacity snapshot"
-  }
-}
-```
+| Method | Endpoint | Description |
+|---|---|---|
+| POST | /schedule/single | Schedule a single call |
+| POST | /schedule/bulk | Schedule multiple calls |
+| POST | /schedule/file | Upload CSV/XLSX for bulk scheduling |
+| GET | /jobs | List scheduled jobs + live capacity |
+| GET | /capacity | View trunk capacity snapshot |
+| DELETE | /jobs/{job_id} | Cancel a scheduled job |
 
-📥 Input Parameters
-```
-FieldTypeRequiredDescriptionphone_numberstring✅Destination phone number (10-digit or E.164)job_idstring❌Custom job ID; auto-generated if omittedtrunk_idstring❌Specific SIP trunk to use; round-robin if omittednamestring❌Contact name passed to the AI agentscheduled_timestring❌ISO format YYYY-MM-DDTHH:MM:SS; runs immediately if omittedmax_retriesint❌Number of retry attempts if call is unanswered (default: 2)retry_delayint❌Seconds between retries (default: 300)company_namestring❌Company name passed to the AI agentcompany_idstring❌Internal company identifierassistant_rolestring❌Role/persona of the AI agent (e.g. Sales Executive)
+# 📥 Input Parameters
 
-```
-Example payload:
-json{
+| Field | Type | Required | Description |
+|---|---|---|---|
+| phone_number | string | ✅ | Destination number (10-digit or E.164) |
+| job_id | string | ❌ | Custom ID (auto-generated if omitted) |
+| trunk_id | string | ❌ | Force specific trunk |
+| name | string | ❌ | Contact name |
+| scheduled_time | string | ❌ | ISO format YYYY-MM-DDTHH:MM:SS |
+| max_retries | int | ❌ | Retry attempts (default: 2) |
+| retry_delay | int | ❌ | Seconds between retries (default: 300) |
+| company_name | string | ❌ | Company name |
+| company_id | string | ❌ | Internal company identifier |
+| assistant_role | string | ❌ | AI agent persona |
+
+**Example Payload**
+
+```json
+{
   "phone_number": "9876543210",
   "name": "Ravi Kumar",
   "scheduled_time": "2025-06-01T10:30:00",
@@ -61,144 +113,172 @@ json{
 }
 ```
 
-```
+# ✨ Features
 
-✨ Features
+## 🗓 Flexible Scheduling
 
-🗓️ Flexible Call Scheduling
+- Immediate execution (omit scheduled_time)
+- Future scheduling with ISO datetime
+- Past-time safety → executes immediately instead of failing
 
-Immediate dispatch — omit scheduled_time to call right now.
-Future scheduling — provide any ISO datetime to queue a call for later.
-Past-time safety — if a scheduled time has already passed, the call fires immediately instead of being dropped.
+## ⚡ Concurrent Multi-Trunk Calling
 
-⚡ Concurrent Multi-Trunk Calling
+- Configurable via SIP_TRUNK_IDS
+- Round-robin load distribution
+- Default: 5 concurrent calls per trunk
+- 5 trunks × 5 slots = 25 concurrent calls
+- Automatic requeue if capacity is full
 
-Supports multiple SIP trunks simultaneously, configurable via SIP_TRUNK_IDS in .env.
-Round-robin trunk selection distributes load evenly across all trunks.
-Up to 5 concurrent calls per trunk (configurable via MAX_CALLS_PER_TRUNK).
-With 5 trunks × 5 slots = 25 simultaneous calls supported out of the box.
-New jobs are scheduled and dispatched independently of in-progress calls — no blocking.
+## 🔄 Intelligent Retry Logic
 
-🔄 Intelligent Retry Logic
+- Automatic retry if unanswered
+- Controlled by max_retries
+- Delayed by retry_delay
+- No infinite loops
+- Suppressed during shutdown
 
-If a call goes unanswered or is missed, it is automatically retried after retry_delay seconds.
-Retries are decremented per attempt up to max_retries — no infinite loops.
-Retries are suppressed during shutdown to prevent ghost jobs on restart.
-If all trunk slots are full at dispatch time, the job auto-requeues itself in 60 seconds instead of being silently dropped.
+## 📊 Live Capacity Monitoring
 
-📊 Live Capacity Monitoring
+**GET /capacity returns:**
 
-GET /capacity returns a real-time snapshot:
+- Active calls
+- Total slots
+- Available slots
+- Per-trunk usage
 
-Total active calls
-Available slots
-Per-trunk utilisation breakdown
+**GET /jobs includes:**
 
+- Job ID
+- Next run time (UTC)
+- Trigger type
+- Full payload
+- Capacity snapshot
 
-GET /jobs embeds the capacity block alongside the job list for a single-call operational view.
+## 📁 Bulk Scheduling (CSV / XLSX)
 
-📋 Rich Job List View
-Each entry in GET /jobs includes:
+Upload via:
 
-id & name — job identity
-next_run_utc — exact ISO timestamp of next execution
-trigger — APScheduler trigger description
-args — full job payload (phone, company, retries, etc.)
-trunk_capacity — live active/available/per-trunk counts
+`POST /schedule/file`
 
-📁 Bulk Scheduling via CSV / XLSX
+**Supported columns:**
 
-Upload a .csv or .xlsx file to /schedule/file.
-Supported columns: phone_number, job_id, trunk_id, name, scheduled_time, max_retries, retry_delay, company_name, company_id, assistant_role.
-Missing optional columns are safely skipped — only phone_number is required.
-Processes every valid row into independent scheduled jobs in one request.
+- phone_number
+- job_id
+- trunk_id
+- name
+- scheduled_time
+- max_retries
+- retry_delay
+- company_name
+- company_id
+- assistant_role
 
-🏠 Room & Participant Lifecycle Management
+Only `phone_number` is required.
 
-A dedicated LiveKit room is created per call with full metadata (company, agent role, contact name, etc.).
-An async room monitor tracks participant count — detects when the human picks up (≥2 participants).
-Room is polled for up to 1 hour to handle long calls gracefully.
-Trunk slot is released automatically when the room closes, freeing capacity for the next call.
+**CSV Example**
 
-📞 Smart Phone Formatting
-
-Strips non-digit characters, leading zeros, and country codes automatically.
-Converts 12-digit numbers starting with 91 (India) to 10-digit local format compatible with Pulse SIP trunks.
-
-🛡️ Graceful Shutdown
-
-_shutting_down flag is set only during actual shutdown, ensuring in-flight monitors don't trigger spurious retries.
-APScheduler and LiveKit client are cleanly closed on exit — no dangling tasks.
-
-🔁 Job Management
-
-DELETE /jobs/{job_id} — cancel any pending job by ID before it fires.
-replace_existing=True — re-registering the same job_id safely updates it in place.
-
-
-📂 Bulk Upload – CSV Format
-csvphone_number,name,company_name,company_id,assistant_role,scheduled_time,max_retries,retry_delay
+```csv
+phone_number,name,company_name,company_id,assistant_role,scheduled_time,max_retries,retry_delay
 9876543210,Ravi Kumar,JuristBot AI,68ecf392,Sales Executive,2025-06-01T10:00:00,2,300
 9123456780,Priya Sharma,JuristBot AI,68ecf392,Support Agent,,1,180
-
-🏗️ Architecture Overview
-
-```
-FastAPI
-  ├── /schedule/* ──► register_job() ──► APScheduler (date trigger)
-  │                                            │
-  │                                   execute_scheduled_call()
-  │                                            │
-  │                                   TrunkManager.acquire()
-  │                                            │
-  │                                   make_outbound_call()
-  │                                     ├── Create LiveKit Room
-  │                                     ├── Dispatch SIP Participant
-  │                                     └── _monitor_room() [async task]
-  │                                               │
-  │                                     TrunkManager.release()
-  │                                     └── Retry if unanswered
-  │
-  ├── GET /jobs      ──► APScheduler jobs + TrunkManager.status()
-  └── GET /capacity  ──► TrunkManager.status()
-
 ```
 
+## 📞 Call Lifecycle
 
-📦 Tech Stack
+For each scheduled call:
 
-Library                                     Purpose
-fastapi                     REST API framework
-livekit                     Room & SIP participant management
-apscheduler                 Async job scheduling
-pandas                      CSV / XLSX parsing
-pydantic                    Request validation
-python-dotenv               Environment config
-uvicorn                     ASGI server
+- LiveKit room is created
+- SIP participant is dispatched
+- Room is monitored asynchronously
+- If answered → marked answered
+- If not answered → retry (if configured)
+- Trunk capacity is released on completion
 
+Each call runs independently and asynchronously.
 
-cron jobs : 
+## 🛡 Graceful Shutdown
+
+On shutdown:
+
+- Scheduler stops cleanly
+- LiveKit client closes
+- DB connection closes
+- Retry logic is disabled
+- No orphaned jobs
+
+Ensures predictable system behaviour.
+
+## ⏰ Cron Automation
+
+| Time | Action |
+|---|---|
+| 9:00 AM | start_day() |
+| 9:15 AM – 5:45 PM | every_15min_task() |
+| 6:00 PM | stop_day() |
+| 6:00 PM – 11:00 PM | after_hours_task() |
+
+**Startup Flow**
 
 ```
-
-9:00 AM  →  start_day()
-              ├── dispatch future-scheduled jobs from DB
-              └── register 15-min job
-
-9:15 AM  →  every_15min_task()  (repeats until 5:45 PM)
-
-6:00 PM  →  stop_day()
-              ├── remove 15-min job
-              └── register hourly job
-
-6:00 PM – 11:00 PM  →  after_hours_task()  (auto-stops at midnight via cron)
-
-
-FastAPI starts
-    └── lifespan()
-          ├── lk_client = LiveKitAPI(...)        # outbound engine
-          ├── setup_cron_jobs()                  # register cron triggers
-          └── scheduler.start()                  # ONE scheduler runs both
-
-
+App Start
+   └── lifespan()
+         ├── LiveKit API client init
+         ├── setup_cron_jobs()
+         └── scheduler.start()
 ```
+
+One shared scheduler manages both:
+
+- Cron automation
+- Individual call jobs
+
+# 📦 Technology Stack
+
+| Library | Purpose |
+|---|---|
+| fastapi | REST API framework |
+| livekit | SIP + room management |
+| apscheduler | Async scheduling engine |
+| pandas | CSV/XLSX parsing |
+| pydantic | Request validation |
+| python-dotenv | Environment management |
+| uvicorn | ASGI server |
+
+# 🏛 Design Principles
+
+- Database-level uniqueness enforcement
+- Capacity-first trunk management
+- Idempotent job scheduling
+- Async-first architecture
+- Operational visibility
+- Clear separation of responsibilities
+
+Built for controlled growth rather than quick fixes.
+
+# 🔧 Production Recommendations
+
+For serious deployments:
+
+- Use MongoDB replica set
+- Deploy behind a reverse proxy (e.g., Nginx)
+- Use process managers (systemd / supervisor)
+- Add monitoring (Prometheus / Grafana)
+- Consider persistent job store for APScheduler
+- Plan horizontal scaling carefully (single scheduler leader pattern)
+
+# 📜 License
+
+Internal or proprietary usage as applicable.
+
+---
+
+If you'd like, I can next provide:
+
+- A Dockerfile
+- docker-compose setup
+- Production deployment guide
+- High-availability architecture plan
+
+You’ve built a strong foundation. With careful deployment discipline, it can operate reliably at scale.
+
+live
