@@ -142,6 +142,8 @@ csvphone_number,name,company_name,company_id,assistant_role,scheduled_time,max_r
 9123456780,Priya Sharma,JuristBot AI,68ecf392,Support Agent,,1,180
 
 🏗️ Architecture Overview
+
+```
 FastAPI
   ├── /schedule/* ──► register_job() ──► APScheduler (date trigger)
   │                                            │
@@ -160,14 +162,24 @@ FastAPI
   ├── GET /jobs      ──► APScheduler jobs + TrunkManager.status()
   └── GET /capacity  ──► TrunkManager.status()
 
-🔒 Environment Variables
-VariableRequiredDescriptionLIVEKIT_URL✅LiveKit server WebSocket URLLIVEKIT_API_KEY✅LiveKit API keyLIVEKIT_API_SECRET✅LiveKit API secretSIP_TRUNK_IDS❌Comma-separated SIP trunk IDs (5 defaults provided)
+```
+
 
 📦 Tech Stack
-LibraryPurposefastapiREST API frameworklivekitRoom & SIP participant managementapschedulerAsync job schedulingpandasCSV / XLSX parsingpydanticRequest validationpython-dotenvEnvironment configuvicornASGI server
+
+Library                                     Purpose
+fastapi                     REST API framework
+livekit                     Room & SIP participant management
+apscheduler                 Async job scheduling
+pandas                      CSV / XLSX parsing
+pydantic                    Request validation
+python-dotenv               Environment config
+uvicorn                     ASGI server
 
 
 cron jobs : 
+
+```
 
 9:00 AM  →  start_day()
               ├── dispatch future-scheduled jobs from DB
@@ -189,16 +201,4 @@ FastAPI starts
           └── scheduler.start()                  # ONE scheduler runs both
 
 
-
-What runs in background automatically
-
-
-9:00 AM  → start_day()  → dispatch DB jobs → register 15-min job
-9:15 AM  → every_15min_task()  (repeats every 15 min)
-           ...
-6:00 PM  → stop_day()  → remove 15-min → register hourly job
-6:00 PM – 11:00 PM  → after_hours_task()  (every hour)
-
-
-Bonus — DB status tracking added
-EventStatus in DBCron dispatchedqueuedSIP call firedin-progressHuman answeredansweredUnanswered, retryingretryAll retries exhaustedfailed
+```
