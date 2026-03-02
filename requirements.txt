@@ -1,0 +1,9 @@
+livekit
+livekit-agents[google,cartesia,deepgram,noise-cancellation,silero,turn-detector]
+livekit-plugins-google
+python-dotenv
+livekit-plugins-openai
+
+livekit-agents[sarvam]
+openpyxl
+apscheduler
