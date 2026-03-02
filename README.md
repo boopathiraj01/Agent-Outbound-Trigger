@@ -280,5 +280,3 @@ If you'd like, I can next provide:
 - High-availability architecture plan
 
 You’ve built a strong foundation. With careful deployment discipline, it can operate reliably at scale.
-
-live
